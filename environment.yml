@@ -1,0 +1,15 @@
+name: peak_analysis
+dependencies:
+  - python
+  - pandas
+  - numpy
+  - traitlets==4.3.3  # needed for vscode compatibility
+  - ipykernel
+  - scipy
+  - matplotlib
+  - seaborn
+  - openpyxl
+  - pybaselines
+  - flake8
+  - black
+  - pip 
