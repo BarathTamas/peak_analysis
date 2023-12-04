@@ -1,6 +1,6 @@
-.vscode/*
-.data/*
-.notebooks/output/*
+.vscode/
+data/*
+notebooks/output/*
 *bat
 
 # Byte-compiled / optimized / DLL files
