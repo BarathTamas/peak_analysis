@@ -2,7 +2,7 @@ from abc import abstractmethod
 import numpy as np
 from numpy.typing import NDArray
 from scipy import signal
-from typing import Dict, Tuple
+from typing import Dict, List, Tuple
 
 
 class PeakDetector:
@@ -178,6 +178,48 @@ class RobustNoiseSDScipyPeakDetector(NoiseSDScipyPeakDetector):
     def _estimate_noise_stdev(self, trace_arr: NDArray) -> float:
         # calculate prominence threshold in robust sd units (based on interquartile distance)
         # our reference distribution will be a lognormal instead of a normal
-        q25, q75 = np.quantile(trace_arr[self.earliest_peak_idx:], [0.25, 0.75])
+        q25, q75 = np.quantile(trace_arr[self.earliest_peak_idx :], [0.25, 0.75])
         # for normal distribution: sd = (q75 - q25) / 1.349
         return np.log(q75 / q25) / 1.349
+
+
+class TamasPeakDetector(PeakDetector):
+    def __init__(
+        self, earliest_peak_idx: int = 0, min_peak_amplitude: float = 0.0, **kwargs
+    ) -> None:
+        super().__init__(
+            earliest_peak_idx=earliest_peak_idx,
+            min_peak_amplitude=min_peak_amplitude,
+            **kwargs
+        )
+
+
+    def _find_peak_row_idx(self, trace_arr: NDArray, threshold: float) -> NDArray:
+        """_summary_
+
+        1. identify all points above the threshold
+        2. group the these points into continous segments
+        3. find the maximum in each group
+        """
+        _above_threshold: NDArray = trace_arr > threshold
+        # a segment boundary is where 0 -> 1 or 1 -> 0 transition happens
+        segment_boundaries: NDArray = (
+            np.where(np.diff(_above_threshold.astype("int")) != 0)[0] + 1
+        )
+        # split the values into consecutive segments, for now this includes the below threshold parts too
+        segments: List[NDArray] = np.split(trace_arr, segment_boundaries)
+        # keep track of absolute position of each value on the segments
+        segment_abs_idx: List[NDArray] = np.split(
+            np.arange(0, len(trace_arr)), segment_boundaries
+        )
+        # find the postion of the max in each segment
+        segments_max_idx: List[int] = [x.argmax() for x in segments]
+        # convert to absolute position (and array format)
+        segment_max_abs_idx: NDArray = np.array(
+            [x[i] for x, i in zip(segment_abs_idx, segments_max_idx)]
+        )
+        # get the max values by segment
+        segments_max_vals: NDArray = np.take(trace_arr, segment_max_abs_idx)
+        # filter maxima above the threshold
+        _above_threshold: NDArray = segments_max_vals > threshold
+        return segment_max_abs_idx[_above_threshold]
