@@ -6,7 +6,9 @@ from typing import Dict, Tuple
 
 
 class PeakDetector:
-    def __init__(self, earliest_peak_idx: int = 0, min_peak_amplitude: float = 0.0) -> None:
+    def __init__(
+        self, earliest_peak_idx: int = 0, min_peak_amplitude: float = 0.0
+    ) -> None:
         self.earliest_peak_idx: int = earliest_peak_idx
         self.min_peak_amplitude: float = min_peak_amplitude
 
@@ -35,7 +37,7 @@ class PeakDetector:
         return amplitudes >= min_peak_amplitude
 
     @abstractmethod
-    def get_peaks(trace_arr: NDArray) -> Tuple[NDArray, NDArray]:
+    def get_peaks(self, trace_arr: NDArray, **kwgars) -> Tuple[NDArray, NDArray]:
         pass
 
     @abstractmethod
@@ -46,8 +48,8 @@ class PeakDetector:
 class ScipyPeakDetector(PeakDetector):
     def __init__(
         self,
-        prominence_in_stdev: float,
         wlen: int,
+        distance: int = 1,
         earliest_peak_idx: int = 0,
         min_peak_amplitude: float = 0.0,
         **kwargs
@@ -57,11 +59,26 @@ class ScipyPeakDetector(PeakDetector):
             min_peak_amplitude=min_peak_amplitude,
             **kwargs
         )
-        self.prominence_in_stdev: float = prominence_in_stdev
         self.wlen: int = wlen
+        self.distance: int = distance
 
-    def get_peaks(self, trace_arr: NDArray, stdev: float) -> Dict[str, NDArray]:
-        prominence: float = self.prominence_in_stdev * stdev
+    def get_peaks(self, trace_arr: NDArray, prominence: float) -> Dict[str, NDArray]:
+        """Find the peaks and their amplitudes.
+
+        Args:
+            trace_arr (NDArray): _description_
+            prominence (float): _description_
+
+        Returns:
+            Dict[str, NDArray]: _description_
+        """
+        return self._get_peaks_with_prominence(
+            trace_arr=trace_arr, prominence=prominence
+        )
+
+    def _get_peaks_with_prominence(
+        self, trace_arr: NDArray, prominence: float
+    ) -> Dict[str, NDArray]:
         peak_row_idx: NDArray = self._find_peak_row_idx(
             trace_arr=trace_arr, prominence=prominence
         )
@@ -77,4 +94,90 @@ class ScipyPeakDetector(PeakDetector):
         return trace_arr[peak_row_idx]
 
     def _find_peak_row_idx(self, trace_arr: NDArray, prominence: float) -> NDArray:
-        return signal.find_peaks(trace_arr, prominence=prominence, wlen=self.wlen)[0]
+        return signal.find_peaks(
+            trace_arr, prominence=prominence, wlen=self.wlen, distance=self.distance
+        )[0]
+
+
+class NoiseSDScipyPeakDetector(ScipyPeakDetector):
+    def __init__(
+        self,
+        prominence_in_stdev: float,
+        wlen: int,
+        distance: int = 1,
+        earliest_peak_idx: int = 0,
+        min_peak_amplitude: float = 0.0,
+        **kwargs
+    ) -> None:
+        super().__init__(
+            earliest_peak_idx=earliest_peak_idx,
+            min_peak_amplitude=min_peak_amplitude,
+            wlen=wlen,
+            distance=distance,
+            **kwargs
+        )
+        self.prominence_in_stdev: float = prominence_in_stdev
+
+    def get_peaks(
+        self, trace_arr: NDArray, stdev_lower_bound: float
+    ) -> Dict[str, NDArray]:
+        """Find the peaks and their amplitudes.
+
+        Args:
+            trace_arr (NDArray): _description_
+            stdev_lower_bound (float): _description_
+
+        Returns:
+            Dict[str, NDArray]: _description_
+        """
+        prominence: float = self.prominence_in_stdev * stdev_lower_bound
+        return self._get_peaks_with_prominence(
+            trace_arr=trace_arr, prominence=prominence
+        )
+
+
+class RobustNoiseSDScipyPeakDetector(NoiseSDScipyPeakDetector):
+    def __init__(
+        self,
+        prominence_in_stdev: float,
+        wlen: int,
+        distance: int = 1,
+        earliest_peak_idx: int = 0,
+        min_peak_amplitude: float = 0.0,
+        **kwargs
+    ) -> None:
+        super().__init__(
+            earliest_peak_idx=earliest_peak_idx,
+            min_peak_amplitude=min_peak_amplitude,
+            wlen=wlen,
+            distance=distance,
+            prominence_in_stdev=prominence_in_stdev,
+            **kwargs
+        )
+
+    def get_peaks(
+        self, trace_arr: NDArray, stdev_lower_bound: float
+    ) -> Dict[str, NDArray]:
+        """Find the peaks and their amplitudes.
+
+        Args:
+            trace_arr (NDArray): _description_
+            stdev_lower_bound (float): _description_
+
+        Returns:
+            Dict[str, NDArray]: _description_
+        """
+        stdev_estim: float = self._estimate_noise_stdev(trace_arr)
+        prominence: float = self.prominence_in_stdev * min(
+            stdev_lower_bound, stdev_estim
+        )
+        return self._get_peaks_with_prominence(
+            trace_arr=trace_arr, prominence=prominence
+        )
+
+    def _estimate_noise_stdev(self, trace_arr: NDArray) -> float:
+        # calculate prominence threshold in robust sd units (based on interquartile distance)
+        # our reference distribution will be a lognormal instead of a normal
+        q25, q75 = np.quantile(trace_arr[self.earliest_peak_idx:], [0.25, 0.75])
+        # for normal distribution: sd = (q75 - q25) / 1.349
+        return np.log(q75 / q25) / 1.349
