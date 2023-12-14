@@ -1,5 +1,7 @@
 .vscode/
 data/*
+all_data/*
+old_DATA/*
 notebooks/output/*
 *bat
 
