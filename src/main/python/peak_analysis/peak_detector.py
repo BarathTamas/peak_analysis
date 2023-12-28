@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
 from scipy import signal
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Union
 from matplotlib.axes import Axes
 
 
@@ -22,6 +22,68 @@ class PeakDetector:
         """
         self.earliest_peak_idx: int = earliest_peak_idx
         self.min_peak_amplitude: Tuple[float, float] = min_peak_amplitude
+    
+    def get_peaks(
+        self, trace_arr: NDArray, **kwargs
+    ) -> Dict[str, NDArray]:
+        trace_arr_corced: NDArray = self._coerce_to_1d_array(trace_arr)
+        peak_row_idx: NDArray = self._find_peak_row_idx(
+            trace_arr=trace_arr_corced, **kwargs
+        )
+        amplitudes: NDArray = self._get_amplitudes(
+            trace_arr=trace_arr_corced, peak_row_idx=peak_row_idx
+        )
+        peak_row_idx, amplitudes = self._filter_peaks(
+            peak_row_idx=peak_row_idx, amplitudes=amplitudes, trace_length=len(trace_arr_corced)
+        )
+        return {"peak_row_idx": peak_row_idx, "amplitudes": amplitudes}
+
+    def plot_filters_on_ax(self, ax: Axes, x_series: pd.Series):
+        # mark earliest_peak_idx cutoff on the plot
+        ax.axvline(x=x_series.iloc[self.earliest_peak_idx], color="black", alpha=0.6)
+        amplitude_thresholds: NDArray = np.linspace(
+            self.min_peak_amplitude[0], self.min_peak_amplitude[1], len(x_series) - self.earliest_peak_idx
+        )
+        ax.plot(x_series.iloc[self.earliest_peak_idx:], amplitude_thresholds, color="black", ls="--", alpha=0.6)
+
+    def plot_detection_on_ax(self, ax: Axes, trace_arr: NDArray, x_series: pd.Series, **kwargs):
+        trace_arr_corced: NDArray = self._coerce_to_1d_array(trace_arr)
+        peak_row_idx_all: NDArray = self._find_peak_row_idx(
+            trace_arr=trace_arr_corced, **kwargs
+        )
+        amplitudes_all: NDArray = self._get_amplitudes(
+            trace_arr=trace_arr_corced, peak_row_idx=peak_row_idx_all
+        )
+        peak_row_idx_filt, amplitudes_filt = self._filter_peaks(
+            peak_row_idx=peak_row_idx_all, amplitudes=amplitudes_all, trace_length=len(trace_arr_corced)
+        )
+        _color_list = [
+            "red" if i in peak_row_idx_filt else "gray" for i in peak_row_idx_all
+        ]
+        # plot baseline
+        ax.axhline(y=0, color="tab:orange", linestyle="--", linewidth=1, alpha=1.0)
+        # plot trace
+        ax.plot(x_series, trace_arr, color="tab:blue", alpha=1.0)
+        # this only allows a single color! use scatter for dynamic color
+        # ax.plot(
+        #     x_series.iloc[peak_row_idx_filt],
+        #     amplitudes_filt,
+        #     "o",
+        #     markersize=2,
+        #     c="red"
+        # )
+        ax.vlines(
+            x=x_series.iloc[peak_row_idx_all],
+            ymin=np.zeros(shape=len(peak_row_idx_all)),
+            ymax=amplitudes_all,
+            colors=_color_list,
+            linewidths=1,
+        )
+        return
+
+    def _get_amplitudes(self, trace_arr: NDArray, peak_row_idx: NDArray) -> NDArray:
+        assert isinstance(trace_arr, np.ndarray)
+        return trace_arr[peak_row_idx]
 
     def _filter_peaks(
         self, peak_row_idx: NDArray, amplitudes: NDArray, trace_length: int
@@ -92,24 +154,24 @@ class PeakDetector:
         assert peak_row_idx[0] >= self.earliest_peak_idx
         return amplitudes >= amplitude_thresholds_at_idx[peak_row_idx - self.earliest_peak_idx]
     
-    def plot_filters_on_ax(self, ax: Axes, x_series: pd.Series):
-        # mark earliest_peak_idx cutoff on the plot
-        ax.axvline(x=x_series.iloc[self.earliest_peak_idx], color="black", alpha=0.6)
-        amplitude_thresholds: NDArray = np.linspace(
-            self.min_peak_amplitude[0], self.min_peak_amplitude[1], len(x_series) - self.earliest_peak_idx
-        )
-        ax.plot(x_series.iloc[self.earliest_peak_idx:], amplitude_thresholds, color="black", ls="--", alpha=0.6)
-        
-    @abstractmethod
-    def plot_detection_on_ax(self, ax: Axes, trace_arr: NDArray, x_series: pd.Series, **kwargs):
-        pass
+    def _coerce_to_1d_array(self, s_trace: Union[pd.Series, NDArray]) -> NDArray:
+        arr_trace: NDArray
+        if isinstance(s_trace, pd.Series):
+            arr_trace = s_trace.to_numpy()
+        elif isinstance(s_trace, np.ndarray):
+            arr_trace = s_trace
+            if len(arr_trace.shape) == 1:
+                pass
+            elif len(arr_trace.shape) == 2:
+                arr_trace = arr_trace[:, 0]
+            else:
+                raise ValueError(f"Input must be vector, but has shape {arr_trace.shape}")
+        else:
+            raise ValueError(f"Input must be pandas.Series or numpy.ndarray, but is {type(s_trace)}")
+        return arr_trace
 
     @abstractmethod
-    def get_peaks(self, trace_arr: NDArray, **kwgars) -> Tuple[NDArray, NDArray]:
-        pass
-
-    @abstractmethod
-    def _find_peak_idx(self, trace_arr: NDArray) -> NDArray:
+    def _find_peak_row_idx(self, trace_arr: NDArray, **kwargs) -> NDArray:
         pass
 
 
@@ -130,57 +192,10 @@ class ScipyPeakDetector(PeakDetector):
         self.wlen: int = wlen
         self.distance: int = distance
 
-    def get_peaks(
-        self, trace_arr: NDArray, prominence: float
-    ) -> Dict[str, NDArray]:
-        peak_row_idx: NDArray = self._find_peak_row_idx(
-            trace_arr=trace_arr, prominence=prominence
-        )
-        amplitudes: NDArray = self._get_amplitudes(
-            trace_arr=trace_arr, peak_row_idx=peak_row_idx
-        )
-        peak_row_idx, amplitudes = self._filter_peaks(
-            peak_row_idx=peak_row_idx, amplitudes=amplitudes, trace_length=len(trace_arr)
-        )
-        return {"peak_row_idx": peak_row_idx, "amplitudes": amplitudes}
-
-    def _get_amplitudes(self, trace_arr: NDArray, peak_row_idx: NDArray) -> NDArray:
-        return trace_arr[peak_row_idx]
-
     def _find_peak_row_idx(self, trace_arr: NDArray, prominence: float) -> NDArray:
         return signal.find_peaks(
             trace_arr, prominence=prominence, wlen=self.wlen, distance=self.distance
         )[0]
-        
-    def plot_detection_on_ax(self, ax: Axes, trace_arr: NDArray, x_series: pd.Series, prominence: float):
-        peak_row_idx_all: NDArray = self._find_peak_row_idx(
-            trace_arr=trace_arr, prominence=prominence
-        )
-        amplitudes_all: NDArray = self._get_amplitudes(
-            trace_arr=trace_arr, peak_row_idx=peak_row_idx_all
-        )
-        peak_row_idx_filt, amplitudes_filt = self._filter_peaks(
-            peak_row_idx=peak_row_idx_all, amplitudes=amplitudes_all, trace_length=len(trace_arr)
-        )
-        _color_list = [
-            "red" if i in peak_row_idx_filt else "gray" for i in peak_row_idx_all
-        ]
-        # this only allows a single color! use scatter for dynamic color
-        # ax.plot(
-        #     x_series.iloc[peak_row_idx_filt],
-        #     amplitudes_filt,
-        #     "o",
-        #     markersize=2,
-        #     c="red"
-        # )
-        ax.vlines(
-            x=x_series.iloc[peak_row_idx_all],
-            ymin=np.zeros(shape=len(peak_row_idx_all)),
-            ymax=amplitudes_all,
-            colors=_color_list,
-            linewidths=1,
-        )
-        return
 
 
 class NoiseSDScipyPeakDetector(ScipyPeakDetector):
@@ -315,3 +330,10 @@ class TamasPeakDetector(PeakDetector):
         # filter maxima above the threshold
         _above_threshold: NDArray = segments_max_vals > threshold
         return segment_max_abs_idx[_above_threshold]
+
+
+class SingleMaxPeakDetector(PeakDetector):
+    def _find_peak_row_idx(self, trace_arr: NDArray) -> NDArray:
+        row_idx_of_max: int = np.argmax(trace_arr[self.earliest_peak_idx:]) + self.earliest_peak_idx
+        assert isinstance(row_idx_of_max, np.int64), type(row_idx_of_max)
+        return np.array([row_idx_of_max])

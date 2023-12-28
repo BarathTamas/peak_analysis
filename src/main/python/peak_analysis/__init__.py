@@ -2,13 +2,14 @@ from peak_analysis.baseline_fitter import (
     BaseLineFitter,
     ModPolyBaseLineFitter,
     ModPolyCustomBaseLineFitter,
-    IModPolyBaseLineFitter
+    IModPolyBaseLineFitter,
+    FirstNBaseLineFitter
 )
 from peak_analysis.peak_detector import (
     PeakDetector,
     ScipyPeakDetector,
     NoiseSDScipyPeakDetector,
-    RobustNoiseSDScipyPeakDetector
-    
+    RobustNoiseSDScipyPeakDetector,
+    SingleMaxPeakDetector
 )
 from peak_analysis.trace_processor import TraceProcessor

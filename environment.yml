@@ -10,6 +10,7 @@ dependencies:
   - seaborn
   - openpyxl
   - pybaselines
+  - statsmodels
   - flake8
   - black
   - pip 
