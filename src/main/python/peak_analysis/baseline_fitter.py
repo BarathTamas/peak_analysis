@@ -1,8 +1,10 @@
-import pandas as pd
-import numpy as np
 from abc import abstractmethod
-from numpy.typing import NDArray
+from textwrap import dedent
 from typing import Callable, Union
+
+import numpy as np
+import pandas as pd
+from numpy.typing import NDArray
 from pybaselines import Baseline
 
 
@@ -35,11 +37,38 @@ class PolyBaseLineFitter(BaseLineFitter):
     def __init__(self, poly_order: int, **kwargs) -> None:
         super().__init__(**kwargs)
         self.poly_order: int = poly_order
+   
+    @property
+    def description(self) -> str:
+        """A verbose description of what the class does, useful for generating reports with the outputs.
+
+        The descriptions will be concatenated along the inheritance chain.
+
+        Returns:
+            str: The description of what the class does to the input.
+        """
+        descr: str = f"""
+        The baseline is fitted as a degree {self.poly_order} polynomial curve.\n"""
+        return dedent(descr)
 
 
 class ModPolyBaseLineFitter(PolyBaseLineFitter):
     def __init__(self, poly_order: int, **kwargs) -> None:
         super().__init__(poly_order=poly_order, **kwargs)
+
+    @property
+    def description(self) -> str:
+        """A verbose description of what the class does, useful for generating reports with the outputs.
+
+        The descriptions will be concatenated along the inheritance chain.
+
+        Returns:
+            str: The description of what the class does to the input.
+        """
+        descr: str = """
+        The baseline is fitted using the Modpoly algorithm.\n"""
+        descr = dedent(descr) + super().description
+        return descr
 
     def get_baseline(self, s_trace: Union[pd.Series, NDArray]) -> NDArray:
         arr_trace: NDArray = self._coerce_to_1d_array(s_trace)
@@ -50,6 +79,20 @@ class ModPolyBaseLineFitter(PolyBaseLineFitter):
 class IModPolyBaseLineFitter(PolyBaseLineFitter):
     def __init__(self, poly_order: int, **kwargs) -> None:
         super().__init__(poly_order=poly_order, **kwargs)
+    
+    @property
+    def description(self) -> str:
+        """A verbose description of what the class does, useful for generating reports with the outputs.
+
+        The descriptions will be concatenated along the inheritance chain.
+
+        Returns:
+            str: The description of what the class does to the input.
+        """
+        descr: str = """
+        The baseline is fitted using the IModpoly algorithm.\n"""
+        descr = dedent(descr) + super().description
+        return descr
 
     def get_baseline(self, s_trace: Union[pd.Series, NDArray]) -> NDArray:
         arr_trace: NDArray = self._coerce_to_1d_array(s_trace)
@@ -61,6 +104,22 @@ class ModPolyCustomBaseLineFitter(PolyBaseLineFitter):
     def __init__(self, poly_order: int, optional_segment_length: int, **kwargs) -> None:
         super().__init__(poly_order=poly_order, **kwargs)
         self.optional_segment_length = optional_segment_length
+    
+    @property
+    def description(self) -> str:
+        """A verbose description of what the class does, useful for generating reports with the outputs.
+
+        The descriptions will be concatenated along the inheritance chain.
+
+        Returns:
+            str: The description of what the class does to the input.
+        """
+        descr: str = f"""
+        The baseline is fitted using the Modpoly algorithm on either the full trace or ignoring the first
+        {self.optional_segment_length} points. The first optional segment is only used if its first half
+        manages to 'touch' the baseline. If the first half is completely 'hanging' in the air, it is ignored.\n"""
+        descr = dedent(descr) + super().description
+        return descr
 
     def get_baseline(self, s_trace: Union[pd.Series, NDArray]) -> NDArray:
         # shortened alias

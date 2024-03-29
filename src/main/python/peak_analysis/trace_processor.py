@@ -11,17 +11,29 @@ class TraceProcessor:
         self.baseline_fitter: BaseLineFitter = baseline_fitter
         self.peak_detector: PeakDetector = peak_detector
 
+    @property
+    def description(self) -> str:
+        """A verbose description of what the class does, useful for generating reports with the outputs.
+
+        The descriptions will be concatenated along the inheritance chain.
+
+        Returns:
+            str: The description of what the class does to the input.
+        """
+        descr: str = self.baseline_fitter.description + self.peak_detector.description
+        return descr
+
     def process_trace(self, s_trace: pd.Series, **kwargs) -> Dict[str, NDArray]:
         trace_raw: NDArray = self._coerce_to_array(s_trace)
         baseline: NDArray
         trace_proc: NDArray
         trace_proc, baseline = self._process_baseline(trace_raw)
-        # peak_row_idx: NDArray
+        # peak_pos: NDArray
         # amplitudes: NDArray
         peak_dict: Dict[str, NDArray] = self.peak_detector.get_peaks(
             trace_arr=trace_proc, **kwargs
         )
-        # peak_row_idx = peak_dict["peak_row_idx"]
+        # peak_pos = peak_dict["peak_pos"]
         # amplitudes = peak_dict["amplitudes"]
         return {"trace_proc": trace_proc, "baseline": baseline, **peak_dict}
 
