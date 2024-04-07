@@ -14,14 +14,15 @@ class PeakDetector:
         earliest_peak_pos: int = 0,
         min_peak_amplitude: Tuple[float, float] = (0.0, 0.0),
     ) -> None:
-        """A generic class for peak detection. It can filter peaks based on position and absolute size, but
-        cannot detect peaks itself.
-
+        """A generic class for peak detection.
+        
+        It can filter peaks based on position and absolute size, but cannot detect peaks itself.
+        
         Args:
-            earliest_peak_pos (int, optional): The earliest row index at which a peak can be detected, all peaks
-                before this index get filtered out. Defaults to 0.
-            min_peak_amplitude (Tuple[float, float], optional): Filter out all detected peaks under this threshold.
-                A tuple of two values, being the threshold at the start and the treshold at the end, with the values
+            earliest_peak_pos (int, optional): The earliest row index at which a peak can be detected, all peaks before
+                this index get filtered out. Defaults to 0.
+            min_peak_amplitude (Tuple[float, float], optional): Filter out all detected peaks under this threshold. A
+                tuple of two values, being the threshold at the start and the treshold at the end, with the values
                 linearly interploated inbetween. Defaults to (0.0, 0.0).
         """
         self.earliest_peak_pos: int = earliest_peak_pos

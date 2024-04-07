@@ -127,7 +127,11 @@ class ModPolyCustomBaseLineFitter(PolyBaseLineFitter):
         # if array is passed, by default it would be passed by reference
         arr_trace: NDArray = self._coerce_to_1d_array(s_trace).copy()
         # do initial fit
-        baseline: NDArray = Baseline().modpoly(arr_trace, poly_order=self.poly_order)[0]
+        try:
+            baseline: NDArray = Baseline().modpoly(arr_trace, poly_order=self.poly_order)[0]
+        except ValueError as error:
+            print(f"Invalid values in trace with shape {arr_trace.shape}:\n{arr_trace}")
+            raise error
         _residuals: NDArray = arr_trace - baseline
         # If all of the residuals from the first half of the period are positive after the baseline removal
         # it basically implies the starting segment is useless for estimating a baseline.
