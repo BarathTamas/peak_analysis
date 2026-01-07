@@ -1,25 +1,19 @@
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
+from itertools import product
 from pathlib import Path
-from matplotlib.ticker import MaxNLocator, AutoMinorLocator
+from typing import Literal
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import seaborn as sns
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
-
-from scipy import stats
-
-from typing import Literal
+from matplotlib.ticker import AutoMinorLocator, MaxNLocator
 from numpy.typing import NDArray
-from itertools import product
-
+from scipy import stats
 from statsmodels.stats.proportion import proportion_confint, proportions_ztest
 
-from peak_analysis import (
-    BaseLineFitter,
-    PeakDetector,
-    TraceProcessor,
-)
+from peak_analysis import BaseLineFitter, PeakDetector, TraceProcessor
 
 
 def process_data(
@@ -423,7 +417,7 @@ def _calculate_p_value_of_means(
 
 
 def plot_output_distribution(
-    agg_outputs,
+    agg_outputs: pd.DataFrame,
     columns_to_plot: list[str],
     id_colname: str = "peak_ID",
     n_major_ticks: int | None = None,
@@ -434,6 +428,22 @@ def plot_output_distribution(
     condition_alias_dict: dict[str, str] = {},
     colname_alias_dict: dict[str, str] = {},
 ):
+    """Plot the distribution of values over the traces.
+
+    Args:
+        agg_outputs (pd.DataFrame): The summary statistics for the tarces.
+        columns_to_plot (list[str]): The variables for which the distribution should be plotted.
+        id_colname (str): The unique key for the rows. Defaults to "peak_ID".
+        n_major_ticks (int | None, optional): _description_. Defaults to None.
+        n_minor_to_major (int | None, optional): _description_. Defaults to None.
+        x_rotation (float, optional): _description_. Defaults to 0.0.
+        width (float, optional): _description_. Defaults to 0.75.
+        figsize (tuple[float, float] | None, optional): _description_. Defaults to None.
+        group_alias_dict (dict[str, str]): A dict for renaming the ticklabels with an alias name for certain conditions.
+            Defaults to {}.
+        colname_alias_dict (dict[str, str]): A dict for renaming the labels for certain variables on the plots. Defaults
+            to {}.
+    """    
     df_plot: pd.DataFrame = pd.concat(agg_outputs, axis=0)
     df_plot["condition"] = df_plot[id_colname].str.split("_").str[0]
     df_plot["condition"] = df_plot["condition"].replace(condition_alias_dict)
@@ -559,10 +569,6 @@ def _make_boxplot(
             "markersize": 3,
             "markeredgecolor": "black",
         },
-        # palette=colors_for_bars,
-        # alpha=alpha,
-        # linewidth=linewidth,
-        # edgecolor=edgecolor,
         width=width,
         ax=ax,
     )
