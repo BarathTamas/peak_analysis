@@ -2,13 +2,18 @@ from peak_analysis import BaseLineFitter, PeakDetector
 import pandas as pd
 from numpy.typing import NDArray
 from typing import Dict, Tuple, Union
+from peak_analysis import ZeroBaselineFitter
 
 
 class TraceProcessor:
     def __init__(
-        self, baseline_fitter: BaseLineFitter, peak_detector: PeakDetector
+        self, baseline_fitter: BaseLineFitter | None, peak_detector: PeakDetector
     ) -> None:
-        self.baseline_fitter: BaseLineFitter = baseline_fitter
+        self.baseline_fitter: BaseLineFitter
+        if baseline_fitter is None:
+            self.baseline_fitter = ZeroBaselineFitter()
+        else:
+            self.baseline_fitter = baseline_fitter
         self.peak_detector: PeakDetector = peak_detector
 
     @property

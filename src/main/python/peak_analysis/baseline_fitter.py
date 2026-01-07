@@ -33,11 +33,34 @@ class BaseLineFitter:
         pass
 
 
+class ZeroBaselineFitter(BaseLineFitter):
+    """Dummy baseline fitter class that simply returns all 0 baselines.
+
+    This is useful when we want to use the peak detection flow without actually removing any baselines.
+    """
+    def get_baseline(self, s_trace: Union[pd.Series, NDArray]) -> NDArray:
+        arr_baseline: NDArray = np.zeros(shape=(len(s_trace),))
+        return arr_baseline
+
+    @property
+    def description(self) -> str:
+        """A verbose description of what the class does, useful for generating reports with the outputs.
+
+        The descriptions will be concatenated along the inheritance chain.
+
+        Returns:
+            str: The description of what the class does to the input.
+        """
+        descr: str = """
+        No baseline is fitted (it's all 0s).\n"""
+        return dedent(descr)
+
+
 class PolyBaseLineFitter(BaseLineFitter):
     def __init__(self, poly_order: int, **kwargs) -> None:
         super().__init__(**kwargs)
         self.poly_order: int = poly_order
-   
+
     @property
     def description(self) -> str:
         """A verbose description of what the class does, useful for generating reports with the outputs.
@@ -79,7 +102,7 @@ class ModPolyBaseLineFitter(PolyBaseLineFitter):
 class IModPolyBaseLineFitter(PolyBaseLineFitter):
     def __init__(self, poly_order: int, **kwargs) -> None:
         super().__init__(poly_order=poly_order, **kwargs)
-    
+
     @property
     def description(self) -> str:
         """A verbose description of what the class does, useful for generating reports with the outputs.
@@ -104,7 +127,7 @@ class ModPolyCustomBaseLineFitter(PolyBaseLineFitter):
     def __init__(self, poly_order: int, optional_segment_length: int, **kwargs) -> None:
         super().__init__(poly_order=poly_order, **kwargs)
         self.optional_segment_length = optional_segment_length
-    
+
     @property
     def description(self) -> str:
         """A verbose description of what the class does, useful for generating reports with the outputs.
@@ -159,3 +182,22 @@ class FirstNBaseLineFitter(BaseLineFitter):
         baseline: float = self.agg_func(arr_trace[:self.first_n])
         arr_baseline: NDArray = np.full_like(arr_trace, baseline)
         return arr_baseline
+
+    @property
+    def description(self) -> str:
+        """A verbose description of what the class does, useful for generating reports with the outputs.
+
+        The descriptions will be concatenated along the inheritance chain.
+
+        Returns:
+            str: The description of what the class does to the input.
+        """
+        if self.agg_func == np.mean:
+            agg_name = "mean"
+        elif self.agg_func == np.median:
+            agg_name = "median"
+        else:
+            raise NotImplementedError()
+        descr: str = f"""
+        The baseline is the {agg_name} of the first 15 points of the segment.\n"""
+        return dedent(descr)

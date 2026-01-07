@@ -1,5 +1,6 @@
 from peak_analysis.baseline_fitter import (
     BaseLineFitter,
+    ZeroBaselineFitter,
     ModPolyBaseLineFitter,
     ModPolyCustomBaseLineFitter,
     IModPolyBaseLineFitter,

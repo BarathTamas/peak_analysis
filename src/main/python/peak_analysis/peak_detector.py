@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
 from scipy import signal
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Tuple, Union, Literal
 from matplotlib.axes import Axes
 from textwrap import dedent
 
@@ -15,9 +15,9 @@ class PeakDetector:
         min_peak_amplitude: Tuple[float, float] = (0.0, 0.0),
     ) -> None:
         """A generic class for peak detection.
-        
+
         It can filter peaks based on position and absolute size, but cannot detect peaks itself.
-        
+
         Args:
             earliest_peak_pos (int, optional): The earliest row index at which a peak can be detected, all peaks before
                 this index get filtered out. Defaults to 0.
@@ -44,13 +44,13 @@ class PeakDetector:
         return dedent(descr)
 
     def get_peaks(self, trace_arr: NDArray, **kwargs) -> Dict[str, NDArray]:
-        trace_arr_corced: NDArray = self._coerce_to_1d_array(trace_arr)
-        peak_pos: NDArray = self._find_peak_pos(trace_arr=trace_arr_corced, **kwargs)
+        trace_arr_coerced: NDArray = self._coerce_to_1d_array(trace_arr)
+        peak_pos: NDArray = self._find_peak_pos(trace_arr=trace_arr_coerced, **kwargs)
         amplitudes: NDArray = self._get_amplitudes(
-            trace_arr=trace_arr_corced, peak_pos=peak_pos
+            trace_arr=trace_arr_coerced, peak_pos=peak_pos
         )
         peak_pos, amplitudes = self._filter_peaks(
-            peak_pos=peak_pos, amplitudes=amplitudes, trace_length=len(trace_arr_corced)
+            peak_pos=peak_pos, amplitudes=amplitudes, trace_length=len(trace_arr_coerced)
         )
         return {"peak_pos": peak_pos, "amplitudes": amplitudes}
 
@@ -301,6 +301,20 @@ class NoiseSDScipyPeakDetector(ScipyPeakDetector):
         super().plot_detection_on_ax(
             ax=ax, trace_arr=trace_arr, x_series=x_series, prominence=prominence
         )
+        plot_text = (
+            f"prominence={self.prominence_in_stdev}*{str(round(stdev_lower_bound, 2))}"
+        )
+        ax.text(
+            0.01,
+            0.99,
+            plot_text,
+            color="darkred",
+            fontsize=12,
+            fontweight="bold",
+            ha="left",
+            va="top",
+            transform=ax.transAxes,
+        )
         return
 
 
@@ -312,6 +326,9 @@ class RobustNoiseSDScipyPeakDetector(NoiseSDScipyPeakDetector):
         distance: int = 1,
         earliest_peak_pos: int = 0,
         min_peak_amplitude: float = 0.0,
+        lower_quantile: float = 0.05,
+        upper_quantile: float = 0.35,
+        which_stdev: Literal["min", "max", "mean", "estimated", "exogenous"] = "min",
         **kwargs,
     ) -> None:
         super().__init__(
@@ -322,6 +339,11 @@ class RobustNoiseSDScipyPeakDetector(NoiseSDScipyPeakDetector):
             prominence_in_stdev=prominence_in_stdev,
             **kwargs,
         )
+        assert which_stdev in ["min", "max", "mean", "estimated", "exogenous"]
+        self.which_stdev = which_stdev
+        self.lower_quantile = lower_quantile
+        self.upper_quantile = upper_quantile
+        assert self.lower_quantile < self.upper_quantile
 
     @property
     def description(self) -> str:
@@ -332,12 +354,52 @@ class RobustNoiseSDScipyPeakDetector(NoiseSDScipyPeakDetector):
         Returns:
             str: The description of what the class does to the input.
         """
-        descr: str = """
-        A robust estimate of the noise level is calculated using the standard deviation of a lognormal
-        distribution with an interquartile distance equal to that of the data's. The used noise value is
-        taken as the lowest of this estimate and the exogenous noise feature.\n"""
-        descr = dedent(descr) + super().description
+
+        descr: str = f"""
+        An estimate of the noise level is calculated using the standard deviation of the data between the quantiles
+        {self.lower_quantile} and {self.upper_quantile}. The used noise value is """
+        if self.which_stdev == "min":
+            descr += "the minimum of the estimated value and the exogenous standard deviation value."
+        elif self.which_stdev == "max":
+            descr += "the maximum of the estimated value and the exogenous standard deviation value."
+        elif self.which_stdev == "mean":
+            descr += "the average of the estimated value and the exogenous standard deviation value."
+        elif self.which_stdev == "estimated":
+            descr += "the estimated value."
+        elif self.which_stdev == "exogenous":
+            descr += "the exogenous value."
+        else:
+            raise NotImplementedError()
+        descr = dedent(descr + "\n") + super().description
         return descr
+
+    def determine_stdev_lower_bound(self, stdev_default: float, stdev_estim: float) -> float:
+        """_summary_
+
+        Args:
+            stdev_default (float): _description_
+            stdev_estim (float): _description_
+
+        Raises:
+            NotImplementedError: _description_
+
+        Returns:
+            float: _description_
+        """
+        stdev_lower_bound: float
+        if self.which_stdev == "min":
+            stdev_lower_bound = min(stdev_default, stdev_estim)
+        elif self.which_stdev == "max":
+            stdev_lower_bound = max(stdev_default, stdev_estim)
+        elif self.which_stdev == "mean":
+            stdev_lower_bound = np.mean(stdev_default, stdev_estim)
+        elif self.which_stdev == "estimated":
+            stdev_lower_bound = stdev_estim
+        elif self.which_stdev == "exogenous":
+            stdev_lower_bound = stdev_default
+        else:
+            raise NotImplementedError()
+        return stdev_lower_bound
 
     def get_peaks(
         self, trace_arr: NDArray, stdev_lower_bound: float
@@ -353,7 +415,11 @@ class RobustNoiseSDScipyPeakDetector(NoiseSDScipyPeakDetector):
         """
         stdev_estim: float = self._estimate_noise_stdev(trace_arr)
         return super().get_peaks(
-            trace_arr=trace_arr, stdev_lower_bound=min(stdev_lower_bound, stdev_estim)
+            trace_arr=trace_arr,
+            stdev_lower_bound=self.determine_stdev_lower_bound(
+                stdev_default=stdev_lower_bound,
+                stdev_estim=stdev_estim
+            )
         )
 
     def plot_detection_on_ax(
@@ -364,22 +430,27 @@ class RobustNoiseSDScipyPeakDetector(NoiseSDScipyPeakDetector):
         stdev_lower_bound: float,
     ):
         stdev_estim: float = self._estimate_noise_stdev(trace_arr)
+        stdev_lower_bound: float = self.determine_stdev_lower_bound(
+            stdev_default=stdev_lower_bound,
+            stdev_estim=stdev_estim
+        )
         super().plot_detection_on_ax(
             ax=ax,
             trace_arr=trace_arr,
             x_series=x_series,
-            stdev_lower_bound=min(stdev_lower_bound, stdev_estim),
+            stdev_lower_bound=stdev_lower_bound,
         )
         return
 
     def _estimate_noise_stdev(self, trace_arr: NDArray) -> float:
         # calculate prominence threshold in robust sd units (based on interquartile distance)
         # our reference distribution will be a lognormal instead of a normal
-        q25, q75 = np.quantile(trace_arr[self.earliest_peak_pos :], [0.25, 0.75])
-        # for normal distribution: sd = (q75 - q25) / 1.349
-        if q75 / q25 <= 0:
-            raise ValueError(f"q75={q75} and q25={q25} but both have to be positive!")
-        return np.log(q75 / q25) / 1.349
+        lower, upper = np.quantile(trace_arr[self.earliest_peak_pos :], [self.lower_quantile, self.upper_quantile])
+        noise_band = np.logical_and(
+            trace_arr[self.earliest_peak_pos :] >= lower,
+            trace_arr[self.earliest_peak_pos :] <= upper,
+        )
+        return np.std(trace_arr[self.earliest_peak_pos :][noise_band])
 
 
 class TamasPeakDetector(PeakDetector):
@@ -430,3 +501,17 @@ class SingleMaxPeakDetector(PeakDetector):
         )
         assert isinstance(row_idx_of_max, np.int64), type(row_idx_of_max)
         return np.array([row_idx_of_max])
+
+    @property
+    def description(self) -> str:
+        """A verbose description of what the class does, useful for generating reports with the outputs.
+
+        The descriptions will be concatenated along the inheritance chain.
+
+        Returns:
+            str: The description of what the class does to the input.
+        """
+        descr: str = f"""
+        Only a single peak is detected, which is the largest point in the segment.\n"""
+        descr = dedent(descr) + super().description
+        return descr
